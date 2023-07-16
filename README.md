@@ -5,7 +5,7 @@ Google Data Analytics Certification Course
 
 This repository contains the code and analysis for the "How Does a Bike-Share Navigate Speedy Success?" case study. The case study involves analyzing bike-share data using R programming and Tableau.
 
-The notebook is available on [Kaggle](https://www.kaggle.com/code/vrmpiyush/capstone-case-study-in-r-tableau/notebook)
+The notebook is available on [Kaggle](https://www.kaggle.com/code/vrmpiyush/capstone-case-study-in-r-tableau/notebook) and the visualization is uploaded in [Tableau Public](https://public.tableau.com/views/CyclisticDataAnalysis_16891687538450/MemberType?:language=en-US&:display_count=n&:origin=viz_share_link)
 
 ## [Case Study Description](bike_share_analysis.ipynb)
 
@@ -44,10 +44,7 @@ To run the analysis locally, follow these steps:
 6. Extract the final data frame and upload it to Tableau desktop or Tableau public to generate the visualizations.
 
 ## Results and Business Suggestions
-The analysis provides insights into user behavior, ride patterns, and the factors that influence membership conversion. Based on the findings, several business suggestions are provided to convert casual riders to annual members. These suggestions include offering membership benefits, flexible membership options, targeted marketing campaigns, and enhancing the member user experience.
-
-## License
-This project is licensed under the MIT License.  
+The analysis provides insights into user behavior, ride patterns, and the factors that influence membership conversion. Based on the findings, several business suggestions are provided to convert casual riders to annual members. These suggestions include offering membership benefits, flexible membership options, targeted marketing campaigns, and enhancing the member user experience.  
 
 Feel free to customize the README file to fit your specific case study and provide additional details as needed.
 
