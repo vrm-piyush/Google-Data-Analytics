@@ -13,9 +13,9 @@ The case study focuses on a bike-sharing company called Cyclistic. The objective
 
 ## Files
 
-- `bike_share_analysis.ipynb`: Jupyter notebook containing the R code and analysis for the case study.
+- [`bike_share_analysis.ipynb`](bike_share_analysis.ipynb): Jupyter notebook containing the R code and analysis for the case study.
 - [`data`](Dataset): Folder containing the dataset used in the analysis.
-- `visualizations`: Folder containing the visualizations generated during the analysis.
+- [`visualizations`](https://github.com/vrm-piyush/Google-Data-Analytics/tree/697c8aee4deb54507c2b8d9ca08a033b4e21f71f/Tableau%20Data%20Visualization): Folder containing the visualizations generated during the analysis.
 
 ## Technologies Used
 
