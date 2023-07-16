@@ -5,6 +5,8 @@ Google Data Analytics Certification Course
 
 This repository contains the code and analysis for the "How Does a Bike-Share Navigate Speedy Success?" case study. The case study involves analyzing bike-share data using R programming and Tableau.
 
+The notebook is available on [Kaggle](https://www.kaggle.com/code/vrmpiyush/capstone-case-study-in-r-tableau/notebook)
+
 ## [Case Study Description](bike_share_analysis.ipynb)
 
 The case study focuses on a bike-sharing company called Cyclistic. The objective is to analyze user behavior patterns and provide business suggestions to convert casual riders to annual members. The analysis includes exploratory data analysis, visualizations, and data-driven insights.
