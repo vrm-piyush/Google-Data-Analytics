@@ -1,0 +1,522 @@
+---
+title: "Cyclistic Bike Share Analysis"
+author: "Your Name"
+date: "2023-07-26"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+This R Markdown document presents the analysis of Cyclistic bike share data. The goal of this project is to explore the bike share usage patterns, understand the behavior of different user types (members and casual riders), and provide insights to help Cyclistic optimize its marketing strategies.
+
+# Data Pre-processing
+First, we load the necessary libraries for data pre-processing and processing:
+
+```{r load_libraries, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(janitor)
+library(lubridate)
+library(hms)
+```
+
+Next, we import the datasets and merge them into a single dataframe for the year 2022:
+
+```{r import_data}
+jan_22 = read_csv('/kaggle/input/cyclistic/202201-divvy-tripdata.csv')
+feb_22 = read_csv('/kaggle/input/cyclistic/202202-divvy-tripdata.csv')
+mar_22 = read_csv('/kaggle/input/cyclistic/202203-divvy-tripdata.csv')
+apr_22 = read_csv('/kaggle/input/cyclistic/202204-divvy-tripdata.csv')
+may_22 = read_csv('/kaggle/input/cyclistic/202204-divvy-tripdata.csv')
+jun_22 = read_csv('/kaggle/input/cyclistic/202206-divvy-tripdata.csv')
+jul_22 = read_csv('/kaggle/input/cyclistic/202207-divvy-tripdata.csv')
+aug_22 = read_csv('/kaggle/input/cyclistic/202208-divvy-tripdata.csv')
+sep_22 = read_csv('/kaggle/input/cyclistic/202209-divvy-tripdata.csv')
+oct_22 = read_csv('/kaggle/input/cyclistic/202210-divvy-tripdata.csv')
+nov_22 = read_csv('/kaggle/input/cyclistic/202211-divvy-tripdata.csv')
+dec_22 = read_csv('/kaggle/input/cyclistic/202212-divvy-tripdata.csv')
+
+# Merge datasets to form a dataframe for the year 2022
+bike_rides <- rbind(jan_22,feb_22,mar_22,apr_22,may_22,jun_22,jul_22,aug_22,sep_22,oct_22,nov_22,dec_22)
+remove(jan_22,feb_22,mar_22,apr_22,may_22,jun_22,jul_22,aug_22,sep_22,oct_22,nov_22,dec_22)
+
+```
+
+# Data Cleaning and Processing
+We perform data cleaning and processing to prepare the data for analysis:
+
+```{r data_cleaning}
+# removing empty rows and unwanted columns
+bike_rides <- janitor::remove_empty(bike_rides, which = c("cols"))
+bike_rides <- janitor::remove_empty(bike_rides, which = c("rows"))
+bike_rides <- bike_rides %>%
+  select(-c(ride_id, start_station_name, start_station_id, end_station_name, end_station_id, start_lat, start_lng, end_lat, end_lng))
+
+# Creating columns for month, hour, and time of day
+bike_rides$date <- as.Date(bike_rides$started_at)
+bike_rides$started_at <- lubridate::ymd_hms(bike_rides$started_at)
+bike_rides$ended_at <- lubridate::ymd_hms(bike_rides$ended_at)
+bike_rides$time <- as_hms((bike_rides$started_at))
+bike_rides$hour_of_day <- hour(bike_rides$time)
+bike_rides$time_of_day <- cut(bike_rides$hour_of_day,
+                              breaks = c(0, 5, 11, 15, 19, 24),
+                              labels = c("Night", "Morning", "Afternoon", "Evening", "Night"),
+                              include.lowest = TRUE)
+bike_rides$time_of_day <- as.character(bike_rides$time_of_day)
+bike_rides$month <- month.name[month(bike_rides$date)]
+
+# Calculating ride length in seconds
+bike_rides$ride_length <- difftime(bike_rides$ended_at, bike_rides$started_at, units = "secs")
+bike_rides <- bike_rides[bike_rides$ride_length > 0, ]
+
+# calculate ride length by subtracting ended_at time from started_at time and converted it to seconds
+bike_rides$ride_length <- difftime(bike_rides$ended_at, bike_rides$started_at,units="secs")
+bike_rides <- bike_rides[bike_rides$ride_length > 0, ]
+bike_rides$duration <- seconds_to_period(bike_rides$ride_length)
+
+# calculate the time in hh:mm:ss format
+bike_rides$hrs <- hour(as_datetime(bike_rides$duration))
+bike_rides$mins <- minute(as_datetime(bike_rides$duration))
+bike_rides$secs <- second(as_datetime(bike_rides$duration))
+bike_rides$ride_length_time <- sprintf("%02d:%02d:%02d", bike_rides$hrs, bike_rides$mins, bike_rides$secs)
+bike_rides <- bike_rides %>%
+           select(-c(hrs,mins,secs,duration,time)) %>%
+           select(rideable_type,started_at,ended_at,ride_length,ride_length_time, everything())
+
+# day of the week and it corresponding number
+bike_rides$day <- weekdays(bike_rides$date)
+weekdays <- c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
+bike_rides$day <- factor(bike_rides$day, levels=weekdays)
+bike_rides$day_of_week <- as.integer(bike_rides$day)
+bike_rides <- bike_rides %>%
+  mutate(m = lubridate::month(date))  # Extract the month from the date column
+
+bike_rides <- bike_rides %>%
+  mutate(season = case_when(
+    m %in% c(3, 4, 5) ~ "Spring",
+    m %in% c(6, 7, 8) ~ "Summer",
+    m %in% c(9, 10, 11) ~ "Autumn",
+    m %in% c(12, 1, 2) ~ "Winter"
+  ))
+bike_rides <- bike_rides %>%
+           select(-m)
+
+```
+
+# Exploratory Data Analysis
+
+## Total Rides
+Let us start by examining the total number of rides in the dataset:
+
+```{r total_rides}
+# cleaning the data - removing rows with null and duplicate values
+bike_rides <- distinct(na.omit(bike_rides))
+
+# final dataset
+cat(underline((bold("\nFinal Dataframe"))))
+View(bike_rides)
+
+# total number of rides
+cat(bold("\nTotal rides"))
+nrow(bike_rides)
+
+# count by member type
+cat(bold("\nRide count by member type"))
+(member_type_count <- bike_rides %>%
+                        group_by(member_casual) %>% 
+                        summarise(total_rides = n(), .groups = "drop"))
+```
+
+## Ride Count by Member Type
+Next, let us analyze the ride count by member type (members and casual riders):
+
+```{r ride_count_by_member_type}
+# TYPE OF BIKE
+# 1.total rides by member type
+cat(bold("\nTotal rides for bike type"))
+cat(underline("\n\tby member type"))
+(total_member_type <- bike_rides %>%
+                   group_by(member_casual,rideable_type) %>%
+                   summarise(total_rides = n(), .groups = "drop") %>%
+                   pivot_wider(names_from = member_casual, values_from = total_rides) %>%
+                   mutate(total_rides = rowSums(select(.,casual, member), na.rm = TRUE)))
+
+# 2.total rides by hour of day
+cat(underline("\n\tby hour of day"))
+(total_bike_hours <- bike_rides %>%
+                  group_by(rideable_type,hour_of_day) %>%
+                  summarise(total_rides = n(), .groups = "drop") %>%
+                  pivot_wider(names_from = rideable_type, values_from = total_rides))
+
+# 3.total bike type time
+cat(bold("\nTotal bike time"))
+(total_bike_type_hours <- bike_rides %>%
+                       group_by(rideable_type) %>%
+                       summarise(total_seconds = sum(ride_length)) %>%
+                       mutate(total_hours = as.numeric(as.duration(total_seconds),"hours")))
+```
+
+## Ride Count by Hour of Day
+
+```{r ride_count_by_hour_of_day}
+# HOUR OF THE DAY
+## total rides by member type
+cat(bold("\nTotal rides for hour"))
+cat(underline("\n\tby member type"))
+(total_hours <- bike_rides %>%
+             group_by(hour_of_day, member_casual) %>%
+             summarise(total_rides = n(), .groups = "drop") %>%
+             pivot_wider(names_from = member_casual, values_from = total_rides) %>%
+             mutate(total_rides = casual + member))
+
+# TIME OF DAY
+## total rides by member type
+cat(bold("\nTotal rides for time of day by member type"))
+(total_rides_time_day <- bike_rides %>%
+                      group_by(member_casual,time_of_day) %>% 
+                      summarise(total_rides = n(), .groups = "drop") %>%
+                      arrange(case_when(time_of_day == "Morning" ~ 1,
+                                        time_of_day == "Afternoon" ~ 2,
+                                        time_of_day == "Evening" ~ 3,
+                                        time_of_day == "Night" ~ 4)) %>%
+                      pivot_wider(names_from = time_of_day, values_from = total_rides))
+
+# DAY OF THE WEEK OR MONTH
+## total rides by member type
+cat(bold("Total rides for day of week"),underline("\n\tby member type\n"))
+(total_rides_day_of_week <- bike_rides %>%
+                         group_by(member_casual,day,day_of_week) %>%
+                         summarise(day_count = n(), .groups = "drop") %>%
+                         pivot_wider(names_from = member_casual, values_from = day_count) %>%
+                         mutate(total_rides = casual + member))
+
+# MONTH
+## total rides by member type
+cat(bold("\nTotal rides for each month"),underline("\n\tby member type\n"))
+(total_rides_month <- bike_rides %>%
+                   group_by(member_casual, month) %>%
+                   summarise(m = n(), .groups = "drop") %>%
+                   mutate(month = factor(month, levels = month.name)) %>%
+                   arrange(member_casual, month) %>%
+                   pivot_wider(names_from = member_casual, values_from = m) %>%
+                   mutate(total_rides = casual + member))
+
+```
+
+# Descriptive Data Analysis
+```{r avg_ride_length}
+# Mean Ride Length
+
+## total average ride length
+cat(bold("Overall Average Ride Length"))
+(avg_ride_length <- round(mean(as.numeric(bike_rides$ride_length)),3))
+
+## average ride length by member type
+cat(bold("\nAverage Ride Length by member type"))
+(avg_member_ride_length <- bike_rides %>%
+                        group_by(member_casual) %>%
+                        summarise(avg_member_ride_length = mean(ride_length, na.rm = TRUE)))
+#                OR
+#   bike_rides %>% group_by(member_casual) %>% 
+#              summarise_at(vars(ride_length),
+#              list(time = mean))
+
+## average ride length for member type by bike type
+cat(bold("\nAverage Ride Length by bike type for member type"))
+(avg_member_bike_ride_length <- bike_rides %>% 
+                             group_by(rideable_type, member_casual) %>% 
+                             summarise_at(vars(ride_length), list(avg_time = mean)) %>%
+                             pivot_wider(names_from = rideable_type, values_from = avg_time))
+
+## average ride length by bike type
+cat(bold("\nAverage Ride Length by bike type"))
+(avg_bike_ride_length <- bike_rides %>%
+                      group_by(rideable_type) %>%
+                      summarise(avg_time = mean(ride_length)))
+
+## average ride length by hour of day
+cat(bold("\nAverage Ride Length by Hour of day for member type"))
+(avg_ride_length_hour <- bike_rides %>%
+                      group_by(hour_of_day, member_casual) %>%
+                      summarise(avg_time = mean(ride_length), .groups = "drop") %>%
+                      pivot_wider(names_from = member_casual, values_from = avg_time))
+
+## average ride length by hour of day
+cat(bold("\nAverage Ride Length by Hour of day"))
+(avg_ride_length_hour_day <- bike_rides %>%
+                          group_by(hour_of_day) %>%
+                          summarise(avg_time = mean(ride_length), .groups = "drop"))
+
+## average ride length by time of day
+cat(bold("\nAverage Ride Length by time of day for member type\n"))
+(avg_ride_length_morning <- bike_rides %>% 
+                         group_by(time_of_day,member_casual) %>% 
+                         summarise_at(vars(ride_length), list(avg_time = mean)) %>%
+                         arrange(case_when(time_of_day == "Morning" ~ 1,
+                                           time_of_day == "Afternoon" ~ 2,
+                                           time_of_day == "Evening" ~ 3,
+                                           time_of_day == "Night" ~ 4)) %>%
+                         pivot_wider(names_from = member_casual, values_from = avg_time))
+
+## overall average ride length by time of day
+cat(bold("\nOverall Average Ride Length by time of day"))
+(total_avg_ride_length <- bike_rides %>%
+                       group_by(time_of_day) %>%
+                       summarise(avg_time = mean(ride_length)) %>%
+                       arrange(case_when(time_of_day == "Morning" ~ 1,
+                                         time_of_day == "Afternoon" ~ 2,
+                                         time_of_day == "Evening" ~ 3,
+                                         time_of_day == "Night" ~ 4)))
+## average ride length for day of the week by member type
+cat(bold("\nAverage Ride Length by member type for day of the week"))
+(avg_time_day_of_week <- bike_rides %>%
+                      group_by(day, day_of_week,member_casual) %>%
+                      summarise(avg_time = mean(ride_length), .groups = "drop") %>%
+                      pivot_wider(names_from = member_casual, values_from = avg_time))
+
+## total average ride length by day of the week
+cat(bold("\nTotal Average Ride Length by day of the week"))
+(total_avg_ride_length_day <- bike_rides %>% 
+                           group_by(day,day_of_week) %>% 
+                           summarise(total_avg_time = mean(ride_length), .groups = "drop"))
+
+## average ride length for month by member type
+cat(bold("\nAverage Ride Length for month by member type"))
+(avg_time_month_member <- bike_rides %>%
+                       group_by(month, member_casual) %>% 
+                       summarise(avg_time = mean(ride_length), .groups = "drop") %>%
+                       mutate(month = factor(month, levels = month.name)) %>%
+                       arrange(month) %>%
+                       pivot_wider(names_from = member_casual, values_from = avg_time))
+
+## average ride length for month
+cat(bold("\nTotal Average Ride Length for month"))
+(avg_time_month_ <- bike_rides %>%
+                 group_by(month) %>% 
+                 summarise(avg_time = mean(ride_length), .groups = "drop") %>%
+                 mutate(month = factor(month, levels = month.name)) %>%
+                 arrange(month))
+
+## average ride length for month by bike type
+cat(bold("\nAverage Ride Length for month by bike type"))
+(avg_time_month_member <- bike_rides %>%
+                           group_by(month, rideable_type) %>% 
+                           summarise(avg_time = mean(ride_length), .groups = "drop") %>%
+                           mutate(month = factor(month, levels = month.name)) %>%
+                           arrange(month) %>%
+                           pivot_wider(names_from = rideable_type, values_from = avg_time))
+```
+# Average ride length by seasons
+
+```{r avg_ride_length}
+## average ride length for seasons 
+### by member type
+cat(bold("\nAverage Ride Length for season by member type"))
+(avg_time_season_member <- bike_rides %>%
+                        group_by(season, member_casual) %>%
+                        summarise(avg_time = mean(ride_length), .groups = "drop") %>%
+                        pivot_wider(names_from = member_casual, values_from = avg_time))
+
+### by bike type
+cat(bold("\nAverage Ride Length for season by bike type"))
+(avg_time_season_bike <- bike_rides %>%
+                      group_by(season, rideable_type) %>%
+                      summarise(avg_time = mean(ride_length), .groups = "drop") %>%
+                      pivot_wider(names_from = rideable_type, values_from = avg_time))
+
+### by time of day
+cat(bold("\nAverage Ride Length for season by bike type"))
+(avg_time_season_time_day <- bike_rides %>%
+                          group_by(season, time_of_day) %>%
+                          summarise(avg_time = mean(ride_length), .groups = "drop") %>%
+                          arrange(case_when( time_of_day == "Morning" ~ 1,
+                                             time_of_day == "Afternoon" ~ 2,
+                                             time_of_day == "Evening" ~ 3,
+                                             time_of_day == "Night" ~ 4)) %>%
+                          pivot_wider(names_from = time_of_day, values_from = avg_time))
+
+### by day of week
+cat(bold("\nAverage Ride Length for season by day of week"))
+(avg_time_season_day <- bike_rides %>%
+                     group_by(season, day, day_of_week) %>%
+                     summarise(avg_time = mean(ride_length), .groups = "drop") %>%
+                     pivot_wider(names_from = season, values_from = avg_time))
+
+### by hour of day
+cat(bold("\nAverage Ride Length for season by hour of day"))
+(avg_time_season_hour <- bike_rides %>%
+                      group_by(season,hour_of_day) %>%
+                      summarise(avg_time = mean(ride_length), .groups = "drop") %>%
+                      pivot_wider(names_from = season, values_from = avg_time))
+
+
+## average ride length for seasons
+cat(bold("\nAverage Ride Length for seasons"))
+(avg_time_season <- bike_rides %>%
+                 group_by(season) %>%
+                 summarise(avg_time = mean(ride_length)))
+
+```
+# Max ride length
+```{r max_ride_length}
+# Max Ride Lengths
+
+## total Max. ride length
+max_ride_length <- max(as.numeric(bike_rides$ride_length))
+cat(bold("Max. Ride Length"),"\n",max_ride_length,"secs")
+
+## Max. ride length by member type
+cat(bold("\n\nMax Ride Length by member type"))
+(max_member_ride_length <- bike_rides %>%
+                        group_by(member_casual) %>%
+                        summarise(max_time = max(ride_length, na.rm = TRUE)))
+#                OR
+#   bike_rides %>% group_by(member_casual) %>% 
+#              summarise_at(vars(ride_length),
+#              list(time = max))
+
+## Max. ride length for member type by bike type
+cat(bold("\nMax. Ride Length by bike type for member type"))
+(max_member_bike_ride_length <- bike_rides %>% 
+                             group_by(member_casual, rideable_type) %>% 
+                             summarise_at(vars(ride_length), list(max_time = max)) %>%
+                             pivot_wider(names_from = member_casual, values_from = max_time) %>%
+                             mutate(max_time = pmax(casual,member,na.rm = TRUE)))
+
+## Max. ride length by hour of day
+cat(bold("\nMax. Ride Length by Hour of day for member type"))
+(max_ride_length_hour <- bike_rides %>%
+                      group_by(hour_of_day, member_casual) %>%
+                      summarise(max_time = max(ride_length), .groups = "drop") %>%
+                      pivot_wider(names_from = member_casual, values_from = max_time) %>%
+                      mutate(max_time = pmax(casual, member)))
+
+## Max. ride length by time of day
+cat(bold("\nMax. Ride Length by time of day for member type\n"))
+(max_ride_length_morning <- bike_rides %>% 
+                         group_by(time_of_day, member_casual) %>%
+                         summarise_at(vars(ride_length), list(max_time = max)) %>%
+                         arrange(case_when(time_of_day == "Morning" ~ 1,
+                                           time_of_day == "Afternoon" ~ 2,
+                                           time_of_day == "Evening" ~ 3,
+                                           time_of_day == "Night" ~ 4)) %>%
+                         pivot_wider(names_from = member_casual, values_from = max_time) %>%
+                         mutate(max_time = max(casual, member)))
+
+```
+```{r max_ride_by_day}
+## Max. ride length for day of the week by member type
+cat(bold("\nMax. Ride Length by member type for day of the week"))
+(max_ride_length_day_of_week <- bike_rides %>%
+                             group_by(day, day_of_week,member_casual) %>%
+                             summarise(max_time = max(ride_length), .groups = "drop") %>%
+                             pivot_wider(names_from = member_casual, values_from = max_time) %>%
+                             mutate(max_time = pmax(casual, member)))
+
+## Max. ride length for month by member type
+cat(bold("\nMax. Ride Length for month by member type"))
+(max_ride_length_month_member <- bike_rides %>%
+                              group_by(month, member_casual) %>% 
+                              summarise(max_time = max(ride_length), .groups = "drop") %>%
+                              mutate(month = factor(month, levels = month.name)) %>%
+                              arrange(month) %>%
+                              pivot_wider(names_from = member_casual, values_from = max_time) %>%
+                              mutate(max_time = pmax(casual, member)))
+
+## Max ride length for month by bike type
+cat(bold("\nMax Ride Length for month by bike type"))
+(max_ride_length_month_member <- bike_rides %>%
+                              group_by(month, rideable_type) %>% 
+                              summarise(max_time = max(ride_length), .groups = "drop") %>%
+                              mutate(month = factor(month, levels = month.name)) %>%
+                              arrange(month) %>% 
+                              pivot_wider(names_from = rideable_type, values_from = max_time) %>%
+                              mutate(max_time = pmax(classic_bike,docked_bike,electric_bike)))
+
+## Max ride length for season by member type
+cat(bold("\nMax Ride Length for season by member type"))
+(max_time_season_member <- bike_rides %>%
+                              group_by(season, member_casual) %>% 
+                              summarise(max_time = max(ride_length), .groups = "drop") %>%
+                              pivot_wider(names_from = member_casual, values_from = max_time))
+
+## Max ride length for season by bike type
+cat(bold("\nMax Ride Length for season by bike type"))
+(max_time_season_member <- bike_rides %>%
+                              group_by(season, rideable_type) %>% 
+                              summarise(max_time = max(ride_length), .groups = "drop") %>%
+                              pivot_wider(names_from = rideable_type, values_from = max_time))
+
+## Max ride length for season by day
+cat(bold("\nMax Ride Length for season by day"))
+(max_time_season_member <- bike_rides %>%
+                              group_by(season, day, day_of_week) %>% 
+                              summarise(max_time = max(ride_length), .groups = "drop") %>%
+                              pivot_wider(names_from = season, values_from = max_time) %>%
+                              mutate(max_time = pmax(Autumn,Spring,Summer,Winter)))
+
+## Max ride length for season by hour of day
+cat(bold("\nMax Ride Length for season by hour of day"))
+(max_time_season_member <- bike_rides %>%
+                              group_by(season, hour_of_day) %>% 
+                              summarise(max_time = max(ride_length), .groups = "drop") %>%
+                              pivot_wider(names_from = season, values_from = max_time) %>%
+                              mutate(max_time = pmax(Autumn,Spring,Summer,Winter)))
+
+## Max ride length for season by time of day
+cat(bold("\nMax Ride Length for season by time of day"))
+(max_time_season_member <- bike_rides %>%
+                        group_by(season, time_of_day) %>% 
+                        summarise(max_time = max(ride_length), .groups = "drop") %>%
+                        arrange(case_when(time_of_day == "Morning" ~ 1,
+                                          time_of_day == "Afternoon" ~ 2,
+                                          time_of_day == "Evening" ~ 3,
+                                          time_of_day == "Night" ~ 4)) %>%
+                        pivot_wider(names_from = time_of_day, values_from = max_time))
+```
+
+# Mode
+```{r mode}
+# Install the DescTools package if not already installed
+# Load the DescTools package
+
+# Calculate the mode of day_of_week
+cat("Mode of day of week is",Mode(bike_rides$day))
+(day_of_week_mode <- Mode(bike_rides$day))
+cat("Mode of bike type is",bike_type_mode <- Mode(bike_rides$rideable_type))
+cat("\n\nMode of member type is",member_type_mode <- Mode(bike_rides$member_casual))
+cat("\n\nMode of time of day is", time_day_mode <- Mode(bike_rides$time_of_day))
+cat("\n\nMode of hour of day is", time_day_mode <- Mode(bike_rides$hour_of_day))
+```
+
+# Visualization
+```{r viz}
+#select only required columns
+cyclistic_tableau <- bike_rides %>% 
+  select(-c(started_at, ended_at))
+
+#export the final dataset for visualization in Tableau
+fwrite(cyclistic_tableau,"cyclistic_tableau.csv",row.names = F, sep = ",")
+display_png(file="/kaggle/input/cyclistic-data-analysis/Member Type.png")
+display_png(file="/kaggle/input/cyclistic-data-analysis/Total Ride per hour by Member Type(Casual).png")
+display_png(file="/kaggle/input/cyclistic-data-analysis/Total Ride per hour by Member Type(Member).png")
+display_png(file="/kaggle/input/cyclistic-data-analysis/Total Rides Month by Member Type(Casual).png")
+display_png(file="/kaggle/input/cyclistic-data-analysis/Total Rides Month by Member Type(Member).png")
+display_png(file="/kaggle/input/cyclistic-data-analysis/Count of bike type by member type(Casual).png")
+display_png(file="/kaggle/input/cyclistic-data-analysis/Count of bike type by member type(Member).png")
+display_png(file = "/kaggle/input/cyclistic-data-analysis/Total Ride Length for Bike Type.png")
+display_png(file = "/kaggle/input/cyclistic-data-analysis/Count of Rides by Time of Day.png")
+display_png(file="/kaggle/input/cyclistic-data-analysis/Avg Ride Length.png")
+display_png(file="/kaggle/input/cyclistic-data-analysis/Avg Ride Length by Bike Type.png")
+display_png(file = "/kaggle/input/cyclistic-data-analysis/Avg. Ride Length by Member type(Casual).png")
+display_png(file = "/kaggle/input/cyclistic-data-analysis/Avg. Ride Length by Member type(Member).png")
+display_png(file = "/kaggle/input/cyclistic-data-analysis/Avg. Ride Length for Month(Casual).png")
+display_png(file = "/kaggle/input/cyclistic-data-analysis/Avg. Ride Length for Month(Member).png")
+display_png(file="/kaggle/input/cyclistic-data-analysis/Avg. Ride Length by Weekday.png")
+display_png(file="/kaggle/input/cyclistic-data-analysis/Ride Length by Weekday.png")
+```
